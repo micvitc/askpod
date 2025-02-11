@@ -4,6 +4,8 @@ from backend.exceptions import (
     TranscriptLoadError,
     QueryError,
 )
+from fastapi.staticfiles import StaticFiles
+
 from backend.utils import write_to_env_file
 from fastapi.middleware.cors import CORSMiddleware
 from backend.schemas import (
@@ -14,7 +16,9 @@ from backend.schemas import (
     HealthCheckResponse,
     SetEnvVarsInput,
 )
-from backend.workflows import query_transcripts, load_pdf, create_podcast
+from backend.workflows import query_transcripts, load_pdf, create_transcript
+
+from backend.tts.generate import generate_audio
 
 from datetime import datetime
 import os
@@ -50,6 +54,8 @@ app.add_middleware(
 #         return query_transcripts(request.query, [])
 #     except Exception as e:
 #         raise QueryError(detail=str(e))
+
+app.mount("/audio", StaticFiles(directory="audio"), name="audio")
 
 
 @app.get("/metadata", response_model=MetadataResponse)
@@ -93,14 +99,29 @@ async def upload_pdf(file: UploadFile = File(...)):
         raise TranscriptLoadError(detail=str(e))
 
 
-@app.post("/create_podcast")
-async def create_podcast_endpoint(file: UploadFile = File(...)):
+@app.post("/create_transcript")
+async def create_transcript_endpoint(file: UploadFile = File(...)):
     try:
         content = await file.read()
         os.makedirs("uploads", exist_ok=True)
         with open(f"uploads/{file.filename}", "wb") as f:
             f.write(content)
-        podcast = create_podcast(f"uploads/{file.filename}")
-        return {"podcast": podcast}
+        podcast = create_transcript(f"uploads/{file.filename}")
+        return podcast
+    except Exception as e:
+        raise TranscriptLoadError(detail=str(e))
+
+
+@app.post("/generate_podcast")
+async def generate_podcast_endpoint(file: UploadFile = File(...)):
+    try:
+        content = await file.read()
+        os.makedirs("uploads", exist_ok=True)
+        with open(f"uploads/{file.filename}", "wb") as f:
+            f.write(content)
+        transcript = create_transcript(f"uploads/{file.filename}")
+        generate_audio(transcript["transcript"])
+        podcast = os.path.join("audio", "combined_audio.wav")
+        return {"podcast_path": f"{podcast}"}
     except Exception as e:
         raise TranscriptLoadError(detail=str(e))

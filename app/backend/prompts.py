@@ -6,7 +6,7 @@ from langchain import hub
 podcast_parser = JsonOutputParser(pydantic_object=PodcastTranscript)
 
 podcast_prompt = PromptTemplate(
-    template="""Create a new podcast transcript based on the given material.\n{format_instructions}\n{input}\n""",
+    template="""Create a new single host podcast transcript. The host is covering and analyzing the given material. Give the entire transcript start to finish. Atleast a 5000 words or more. Do not include timestamps.\n{format_instructions}\n{input}\n""",
     input_variables=["input"],
     partial_variables={"format_instructions": podcast_parser.get_format_instructions()},
 )

@@ -52,6 +52,6 @@ def load_pdf(file):
     return content
 
 
-def create_podcast(file):
+def create_transcript(file):
     data = load_pdf(file)
     return podcast_chain.invoke(data)
