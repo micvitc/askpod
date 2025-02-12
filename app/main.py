@@ -1,13 +1,14 @@
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File, Request
+from fastapi import FastAPI, UploadFile, File, Request, BackgroundTasks, HTTPException
 from backend.exceptions import (
     TranscriptLoadError,
     QueryError,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 
 from fastapi.staticfiles import StaticFiles
-
+import aiofiles
+import uuid
 from backend.utils import write_to_env_file
 from fastapi.middleware.cors import CORSMiddleware
 from backend.schemas import (
@@ -57,6 +58,8 @@ app.add_middleware(
 #     except Exception as e:
 #         raise QueryError(detail=str(e))
 
+os.makedirs("uploads", exist_ok=True)
+os.makedirs("audio", exist_ok=True)
 app.mount("/audio", StaticFiles(directory="audio"), name="audio")
 
 
@@ -118,13 +121,18 @@ async def create_transcript_endpoint(file: UploadFile = File(...)):
 async def generate_podcast_endpoint(request: Request, file: UploadFile = File(...)):
     try:
         content = await file.read()
-        os.makedirs("uploads", exist_ok=True)
-        with open(f"uploads/{file.filename}", "wb") as f:
-            f.write(content)
-        transcript = create_transcript(f"uploads/{file.filename}")
-        generate_audio(transcript["transcript"])
-        podcast_path = os.path.join("audio", "combined_audio.wav")
-        full_url = request.url_for("audio", path="combined_audio.wav")
+        file_id = f"{uuid.uuid4()}--{file.filename}"
+        async with aiofiles.open(f"uploads/{file_id}", "wb") as f:
+            await f.write(content)
+        transcript = create_transcript(f"uploads/{file_id}")
+        generate_audio(transcript["transcript"], output_filename=f"{file_id}.wav")
+        full_url = request.url_for("audio", path=f"{file_id}.wav")
         return {"podcast_path": full_url._url}
     except Exception as e:
         return JSONResponse(status_code=500, content={"detail": str(e)})
+    finally:
+        try:
+            if os.path.exists(f"uploads/{file_id}"):
+                os.remove(f"uploads/{file_id}")
+        except Exception as e:
+            print(f"Error deleting file: {str(e)}")

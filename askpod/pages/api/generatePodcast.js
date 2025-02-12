@@ -1,8 +1,10 @@
 import { IncomingForm } from "formidable";
-import fs from "fs";
+import fs from "fs/promises"; // Use the promise-based fs module
 import path from "path";
 import fetch from "node-fetch";
 import FormData from "form-data";
+import { v4 as uuidv4 } from "uuid"; // Import UUID library
+import { createReadStream } from "fs"; // Import createReadStream from fs module
 
 export const config = {
   api: {
@@ -19,8 +21,10 @@ const handler = async (req, res) => {
   try {
     // Ensure uploads directory exists
     const uploadsDir = path.join(process.cwd(), "uploads");
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
+    try {
+      await fs.mkdir(uploadsDir, { recursive: true });
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
     }
 
     // Parse incoming file
@@ -43,10 +47,14 @@ const handler = async (req, res) => {
       throw new Error("File not provided or could not be saved");
     }
 
+    // Generate a unique file name without original extension
+    const originalName = path.parse(file.originalFilename).name;
+    const uniqueFileName = `${uuidv4()}-${originalName}`;
+    
     // Send file to FastAPI
     const formData = new FormData();
-    formData.append("file", fs.createReadStream(file.filepath), {
-      filename: file.originalFilename,
+    formData.append("file", createReadStream(file.filepath), {
+      filename: uniqueFileName,
       contentType: file.mimetype
     });
 
@@ -63,24 +71,10 @@ const handler = async (req, res) => {
 
     // FastAPI returns { "podcast_path": "<URL to generated audio>" }
     const data = await response.json();
+    console.log(data.podcast_path);
 
-    // Fetch the audio from the returned URL
-    const audioResponse = await fetch(data.podcast_path);
-    if (!audioResponse.ok) {
-      throw new Error("Failed to retrieve generated audio");
-    }
-    const audioBuffer = await audioResponse.arrayBuffer();
-
-    // Save locally to /public/audio/podcast.wav in Next.js
-    const publicAudioDir = path.join(process.cwd(), "public", "audio");
-    if (!fs.existsSync(publicAudioDir)) {
-      fs.mkdirSync(publicAudioDir, { recursive: true });
-    }
-    const localFilePath = path.join(publicAudioDir, "podcast.wav");
-    fs.writeFileSync(localFilePath, Buffer.from(audioBuffer));
-
-    // Return local URL to frontend
-    return res.status(200).json({ podcast_path: "/audio/podcast.wav" });
+    // Simply return the backend provided URL to the frontend.
+    return res.status(200).json({ podcast_path: data.podcast_path });
 
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -90,7 +84,7 @@ const handler = async (req, res) => {
       const filePath = files.file?.[0]?.filepath || files.file?.filepath;
       if (filePath) {
         try {
-          fs.unlinkSync(filePath);
+          await fs.unlink(filePath);
         } catch (e) {
           console.error("Error cleaning up file:", e);
         }

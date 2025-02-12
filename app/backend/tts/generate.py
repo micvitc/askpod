@@ -8,7 +8,6 @@ pipeline = KPipeline(lang_code="a")
 
 
 def generate_audio(text, output_filename="combined_audio.wav"):
-    os.makedirs("audio", exist_ok=True)
     audio_segments = []
     for i, (gs, ps, audio) in enumerate(
         pipeline(text, voice="af_heart", speed=1, split_pattern=r"\n+")

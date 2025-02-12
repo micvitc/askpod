@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-// Adjust the import path for your shadcn‑ui Button component as needed.
 import { Button } from "@/components/ui/button";
 
 const UploadPdf = () => {
@@ -37,6 +36,7 @@ const UploadPdf = () => {
         throw new Error(errorData.message || "An error occurred while processing the file.");
       }
       const data = await response.json();
+      // Use the backend provided URL directly for the audio source
       setAudioUrl(data.podcast_path);
     } catch (err) {
       setError(err.message);
