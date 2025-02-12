@@ -1,9 +1,11 @@
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Request
 from backend.exceptions import (
     TranscriptLoadError,
     QueryError,
 )
+from fastapi.responses import JSONResponse
+
 from fastapi.staticfiles import StaticFiles
 
 from backend.utils import write_to_env_file
@@ -113,7 +115,7 @@ async def create_transcript_endpoint(file: UploadFile = File(...)):
 
 
 @app.post("/generate_podcast")
-async def generate_podcast_endpoint(file: UploadFile = File(...)):
+async def generate_podcast_endpoint(request: Request, file: UploadFile = File(...)):
     try:
         content = await file.read()
         os.makedirs("uploads", exist_ok=True)
@@ -121,7 +123,8 @@ async def generate_podcast_endpoint(file: UploadFile = File(...)):
             f.write(content)
         transcript = create_transcript(f"uploads/{file.filename}")
         generate_audio(transcript["transcript"])
-        podcast = os.path.join("audio", "combined_audio.wav")
-        return {"podcast_path": f"{podcast}"}
+        podcast_path = os.path.join("audio", "combined_audio.wav")
+        full_url = request.url_for("audio", path="combined_audio.wav")
+        return {"podcast_path": full_url._url}
     except Exception as e:
-        raise TranscriptLoadError(detail=str(e))
+        return JSONResponse(status_code=500, content={"detail": str(e)})

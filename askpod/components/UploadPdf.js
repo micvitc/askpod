@@ -1,4 +1,3 @@
-// components/UploadPdf.js
 "use client";
 
 import React, { useState } from "react";
@@ -29,16 +28,16 @@ const UploadPdf = () => {
     formData.append("file", file);
 
     try {
-      const response = await fetch("http://localhost:8000/generate_podcast/", {
+      const response = await fetch("/api/generatePodcast", {
         method: "POST",
         body: formData,
       });
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || "An error occurred while processing the file.");
+        throw new Error(errorData.message || "An error occurred while processing the file.");
       }
       const data = await response.json();
-      setAudioUrl(`http://localhost:8000/${data.podcast_path}`);
+      setAudioUrl(data.podcast_path);
     } catch (err) {
       setError(err.message);
     } finally {
