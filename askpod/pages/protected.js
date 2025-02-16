@@ -1,22 +1,17 @@
-import UploadPdf from "../components/UploadPdf";
-import Navbar from "../components/Navbar";
+// LANGUAGE: javascript
 import { parseCookies } from "nookies";
 
-export default function Home({ user }) {
+export default function ProtectedPage({ user }) {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar user={user} />
-      <div className="flex items-center justify-center py-8">
-        <UploadPdf />
-      </div>
+    <div>
+      <h1>Protected Page</h1>
+      <p>Welcome, {user.username}</p>
     </div>
   );
 }
 
 export async function getServerSideProps(context) {
   const { token } = parseCookies(context);
-  
-  // If token is not available, redirect to login
   if (!token) {
     return {
       redirect: {
@@ -26,12 +21,10 @@ export async function getServerSideProps(context) {
     };
   }
 
-  // Validate the token via the FastAPI endpoint
+  // Optionally validate the token via FastAPI endpoint
   const res = await fetch("http://localhost:8000/users/me", {
     headers: { Authorization: `Bearer ${token}` },
   });
-  
-  // If token is invalid or expired, redirect to login
   if (res.status !== 200) {
     return {
       redirect: {
@@ -40,9 +33,7 @@ export async function getServerSideProps(context) {
       },
     };
   }
-
   const user = await res.json();
-
   return {
     props: { user },
   };

@@ -1,10 +1,27 @@
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File, Request, BackgroundTasks, HTTPException
+import jwt
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
+from passlib.context import CryptContext
+from fastapi import (
+    FastAPI,
+    UploadFile,
+    File,
+    Request,
+    BackgroundTasks,
+    HTTPException,
+    APIRouter,
+    Depends,
+    status,
+)
 from backend.exceptions import (
     TranscriptLoadError,
     QueryError,
 )
+
+from sqlalchemy.orm import Session
+
 from fastapi.responses import JSONResponse, FileResponse
+from datetime import datetime, timedelta
 
 from fastapi.staticfiles import StaticFiles
 import aiofiles
@@ -22,9 +39,9 @@ from backend.schemas import (
 from backend.workflows import query_transcripts, load_pdf, create_transcript
 
 from backend.tts.generate import generate_audio
-
 from datetime import datetime
 import os
+from backend.auth import router as auth_router
 
 
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
@@ -136,3 +153,6 @@ async def generate_podcast_endpoint(request: Request, file: UploadFile = File(..
                 os.remove(f"uploads/{file_id}")
         except Exception as e:
             print(f"Error deleting file: {str(e)}")
+
+
+app.include_router(auth_router)
