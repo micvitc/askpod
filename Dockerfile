@@ -1,6 +1,5 @@
-
 # Use an official Python runtime as a parent image
-FROM python:3.12-slim as backend
+FROM python:3.12-slim
 
 # Set the working directory in the container
 WORKDIR /app
@@ -17,16 +16,12 @@ COPY app/ .
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Expose the backend port
-EXPOSE 8000
+# Install Node.js
+RUN apt-get update && apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs
 
-# Command to run the FastAPI server
-CMD ["fastapi", "run"]
-
-# Use an official Node.js runtime as a parent image
-FROM node:18-alpine as frontend
-
-# Set the working directory in the container
+# Set the working directory for the frontend
 WORKDIR /askpod
 
 # Copy the frontend package.json and package-lock.json into the container
@@ -38,8 +33,8 @@ RUN npm install
 # Copy the frontend source code into the container
 COPY askpod/ .
 
-# Expose the frontend port
-EXPOSE 3000
+# Expose the ports
+EXPOSE 8000 3000
 
-# Command to run the Next.js development server
-CMD ["npm", "run", "dev"]
+# Command to run both the FastAPI server and Next.js development server
+CMD ["sh", "-c", "cd /app && fastapi run & cd /askpod && npm run dev"]
