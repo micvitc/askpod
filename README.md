@@ -15,6 +15,18 @@ AskPod is a web application that allows users to upload PDF files and generate p
 - Node.js
 - Python 3.12 or higher
 
+
+### Environment Variables
+
+Create a `.env` file in the `app` directory and add the following environment variables:
+
+```
+SECRET_KEY=your_secret_key
+OPENAI_API_KEY=your_openai_api_key
+MODEL_NAME=gpt-4o-mini
+BASE_URL=https://api.openai.com/v1/chat/completions
+```
+
 ### Installation
 
 1. Clone the repository:
@@ -42,7 +54,7 @@ or using uv
 
 ```bash
 cd app
-uv venv askpod
+uv venv
 source .venv/bin/activate
 uv sync
 ```
@@ -60,7 +72,7 @@ python -m backend.init_db
 
 ```bash
 cd app
-uvicorn main:app --reload
+fastapi run
 ```
 
 2. Start the Next.js frontend:
@@ -98,17 +110,6 @@ npm run dev
 - `POST /upload_pdf`: Upload a PDF file and get parsed text
 - `POST /create_transcript`: Create a transcript from a PDF file
 - `POST /generate_podcast`: Generate podcast audio from a PDF file
-
-## Environment Variables
-
-Create a `.env` file in the `app` directory and add the following environment variables:
-
-```
-SECRET_KEY=your_secret_key
-OPENAI_API_KEY=your_openai_api_key
-MODEL_NAME=gpt-4o-mini
-BASE_URL=https://api.openai.com/v1/chat/completions
-```
 
 ## Contributing
 
