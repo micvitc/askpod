@@ -133,6 +133,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "scipy" },
     { name = "soundfile" },
+    { name = "sqlalchemy" },
 ]
 
 [package.metadata]
@@ -157,6 +158,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "scipy", specifier = ">=1.15.1" },
     { name = "soundfile", specifier = ">=0.13.1" },
+    { name = "sqlalchemy", specifier = ">=2.0.38" },
 ]
 
 [[package]]
