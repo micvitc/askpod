@@ -13,10 +13,24 @@ from fastapi import (
     Depends,
     status,
 )
+import shutil
 from backend.exceptions import (
     TranscriptLoadError,
     QueryError,
 )
+
+import urllib.parse
+
+
+from backend.models import PodcastSession
+from sqlalchemy.orm import Session
+from backend.database import get_db  # Assume a dependency providing a database session
+
+
+from fastapi import Body, HTTPException
+
+
+from fastapi import Query
 
 from sqlalchemy.orm import Session
 
@@ -46,13 +60,22 @@ from backend.auth import get_current_user
 from backend.models import PodcastSession
 from backend.database import Base, engine, SessionLocal
 
-Base.metadata.create_all(bind=engine)
+from minio import Minio
+from minio.error import S3Error
+
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 FRONTEND_ORIGINS = os.environ.get("FRONTEND_ORIGINS", "").split(",")
 
 app = FastAPI()
 start_time = datetime.now()
 
+Base.metadata.create_all(bind=engine)
+minio_client = Minio(
+    os.getenv("MINIO_SERVER_ADDRESS"),  # Replace with your MinIO server address
+    access_key=os.getenv("MINIO_ACCESS_KEY"),  # Replace with your MinIO access key
+    secret_key=os.getenv("MINIO_SECRET_KEY"),  # Replace with your MinIO secret key
+    secure=False,  # Set to True if using HTTPS
+)
 # Remove this later
 app.add_middleware(
     CORSMiddleware,
@@ -142,16 +165,11 @@ async def create_transcript_endpoint(
         raise TranscriptLoadError(detail=str(e))
 
 
-# LANGUAGE: python
-from backend.models import PodcastSession
-from sqlalchemy.orm import Session
-from backend.database import get_db  # Assume a dependency providing a database session
-
-
-from fastapi import Body, HTTPException
-
-
-from fastapi import Query
+def ensure_bucket_exists(bucket_name: str):
+    """Ensure that the specified bucket exists in MinIO."""
+    found = minio_client.bucket_exists(bucket_name)
+    if not found:
+        minio_client.make_bucket(bucket_name)
 
 
 @app.post("/create_session")
@@ -178,6 +196,10 @@ async def create_session(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+import urllib.parse
+import requests
+
+
 @app.post("/upload_pdf_to_session")
 async def upload_pdf_to_session(
     session_id: int = Query(...),
@@ -185,32 +207,59 @@ async def upload_pdf_to_session(
     user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    try:
-        # Retrieve the session record and ensure it belongs to the current user.
-        session_record = (
-            db.query(PodcastSession)
-            .filter(
-                PodcastSession.id == session_id, PodcastSession.user_id == user.username
-            )
-            .first()
+    # Retrieve session record belonging to current user.
+    session_record = (
+        db.query(PodcastSession)
+        .filter(
+            PodcastSession.id == session_id, PodcastSession.user_id == user.username
         )
-        if not session_record:
-            raise HTTPException(status_code=404, detail="Session not found")
+        .first()
+    )
+    if not session_record:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        user_upload_dir = f"uploads/{user.username}"
+        os.makedirs(user_upload_dir, exist_ok=True)
+        file_path = f"{user_upload_dir}/{session_id}/{file.filename}"
 
-        # Use the existing session folder.
-        session_folder = f"uploads/{user.username}/{session_record.id}"
-        os.makedirs(session_folder, exist_ok=True)
-        pdf_path = f"{session_folder}/{file.filename}"
-        content = await file.read()
-        async with aiofiles.open(pdf_path, "wb") as f:
+        # Save the file locally first
+        async with aiofiles.open(file_path, "wb") as f:
+            content = await file.read()
             await f.write(content)
 
-        # Update the session record with the correct pdf_path.
-        session_record.pdf_path = pdf_path
+        # Upload the file to MinIO
+        minio_bucket = "files"  # Replace with your MinIO bucket name
+        ensure_bucket_exists(minio_bucket)
+        minio_object_name = f"{user.username}/{session_id}/{file.filename}"
+        minio_object_name = urllib.parse.unquote(
+            minio_object_name
+        )  # Decode the object name
+        minio_client.fput_object(minio_bucket, minio_object_name, file_path)
+
+        # Get the MinIO URL
+        minio_url = minio_client.presigned_get_object(minio_bucket, minio_object_name)
+
+        # Update the session record with the MinIO URL
+        session_record.pdf_path = minio_url
+        session_record.pdf_name = file.filename
         db.commit()
-        return session_record
+
+        return {
+            "message": "PDF uploaded successfully",
+            "session_id": session_id,
+            "minio_url": minio_url,
+        }
+    except S3Error as e:
+        raise HTTPException(status_code=500, detail=f"MinIO error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Clean up the uploaded file
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        # Clean up the directory if it is empty
+        if os.path.exists(user_upload_dir) and not os.listdir(user_upload_dir):
+            shutil.rmtree(user_upload_dir)
 
 
 @app.post("/generate_podcast")
@@ -220,6 +269,8 @@ async def generate_podcast_endpoint(
     user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    local_pdf_path = None
+    audio_path = None
     try:
         # Retrieve the session record and ensure it belongs to the current user.
         session_record = (
@@ -232,29 +283,67 @@ async def generate_podcast_endpoint(
         if not session_record:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        # Generate transcript using the stored PDF file.
-        transcript = create_transcript(session_record.pdf_path)
+        # Download the PDF file from the URL stored in pdf_path
+        pdf_url = session_record.pdf_path
+        pdf_filename = os.path.basename(urllib.parse.urlparse(pdf_url).path)
+        local_pdf_path = f"downloads/{user.username}/{session_record.id}/{pdf_filename}"
+        os.makedirs(os.path.dirname(local_pdf_path), exist_ok=True)
+
+        response = requests.get(pdf_url)
+        with open(local_pdf_path, "wb") as f:
+            f.write(response.content)
+
+        # Generate transcript using the downloaded PDF file.
+        transcript = create_transcript(local_pdf_path)
 
         # Create audio in a folder under audio/<username>/<session_id>
         audio_folder = f"audio/{user.username}/{session_record.id}"
         os.makedirs(audio_folder, exist_ok=True)
         # Use the original PDF basename with a .wav extension.
-        base = os.path.splitext(os.path.basename(session_record.pdf_path))[0]
+        base = os.path.splitext(pdf_filename)[0]
         audio_path = f"{audio_folder}/{base}.wav"
         generate_audio(transcript["transcript"], output_filename=audio_path)
 
-        # Update the session record with the audio path.
-        session_record.audio_path = audio_path
+        # Upload the audio file to MinIO
+        minio_bucket = "audio"  # Replace with your MinIO bucket name
+        ensure_bucket_exists(minio_bucket)
+        minio_object_name = f"{user.username}/{session_record.id}/{base}.wav"
+        minio_object_name = urllib.parse.unquote(
+            minio_object_name
+        )  # Decode the object name
+        minio_client.fput_object(minio_bucket, minio_object_name, audio_path)
+
+        # Get the MinIO URL
+        minio_url = minio_client.presigned_get_object(minio_bucket, minio_object_name)
+
+        # Update the session record with the MinIO URL
+        session_record.audio_path = minio_url
         db.commit()
 
-        # Create a full URL to the generated audio.
-        full_url = request.url_for(
-            "audio",
-            path=f"{user.username}/{session_record.id}/{os.path.basename(audio_path)}",
-        )
-        return {"podcast_path": full_url._url, "session_id": session_record.id}
+        return {
+            "message": "Podcast generated successfully",
+            "session_id": session_record.id,
+            "minio_url": minio_url,
+        }
+    except S3Error as e:
+        raise HTTPException(status_code=500, detail=f"MinIO error: {str(e)}")
     except Exception as e:
         return JSONResponse(status_code=500, content={"detail": str(e)})
+    finally:
+        # Clean up the downloaded PDF file and generated audio file
+        if local_pdf_path and os.path.exists(local_pdf_path):
+            os.remove(local_pdf_path)
+        if audio_path and os.path.exists(audio_path):
+            os.remove(audio_path)
+        # Clean up the directories if they are empty
+        if (
+            local_pdf_path
+            and os.path.exists(os.path.dirname(local_pdf_path))
+            and not os.listdir(os.path.dirname(local_pdf_path))
+        ):
+            shutil.rmtree(os.path.dirname(local_pdf_path))
+        if audio_path and os.path.exists(audio_folder) and not os.listdir(audio_folder):
+            shutil.rmtree(audio_folder)
 
 
 @app.get("/sessions")
@@ -268,6 +357,7 @@ async def list_sessions(
     return [
         {
             "id": s.id,
+            "pdf_name": s.pdf_name,
             "pdf_path": s.pdf_path,
             "audio_path": s.audio_path,
             "created_at": s.created_at.isoformat(),

@@ -5,7 +5,7 @@ function MyApp({ Component, pageProps }) {
   return (
     <>
       <Head>
-        <title>MIC FFCS</title>
+        <title>AskPod</title>
         <link rel="icon" href="/favicon.ico" />
       </Head>
       <Component {...pageProps} />

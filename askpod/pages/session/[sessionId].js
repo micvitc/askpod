@@ -1,10 +1,10 @@
-import Navbar from "../components/Navbar";
-import Sidebar from "@/components/Sidebar";
-import RightSidebar from "@/components/RightSidebar";
-import Chat from "@/components/Chat";
+import Navbar from "../../components/Navbar";
+import Sidebar from "../../components/Sidebar";
+import RightSidebar from "../../components/RightSidebar";
+import Chat from "../../components/Chat";
 import { parseCookies } from "nookies";
 
-export default function Home({ user }) {
+export default function SessionHome({ user, sessionId }) {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Navbar user={user} />
@@ -16,13 +16,13 @@ export default function Home({ user }) {
         {/* Middle Content: Chat interface */}
         <main className="flex-1 p-4 flex flex-col">
           <div className="flex-1">
-            <Chat />
+            <Chat currentSessionId={sessionId} />
           </div>
         </main>
-        {/* Right Sidebar: PDF upload and session details */}
+        {/* Right Sidebar: Controls only for current session */}
         <aside className="w-80 bg-white border-l p-4 flex flex-col justify-end">
-          <RightSidebar />
-        </aside>
+  <RightSidebar key={sessionId} currentSessionId={parseInt(sessionId, 10)} />
+</aside>
       </div>
     </div>
   );
@@ -30,8 +30,9 @@ export default function Home({ user }) {
 
 export async function getServerSideProps(context) {
   const { token } = parseCookies(context);
+  const { sessionId } = context.params;
 
-  // If token is not available, redirect to login
+  // Redirect to login if token is missing
   if (!token) {
     return {
       redirect: {
@@ -41,12 +42,11 @@ export async function getServerSideProps(context) {
     };
   }
 
-  // Validate the token via the FastAPI endpoint
+  // Validate token via FastAPI
   const res = await fetch("http://localhost:8000/users/me", {
     headers: { Authorization: `Bearer ${token}` },
   });
 
-  // If token is invalid or expired, redirect to login
   if (res.status !== 200) {
     return {
       redirect: {
@@ -59,6 +59,9 @@ export async function getServerSideProps(context) {
   const user = await res.json();
 
   return {
-    props: { user },
+    props: {
+      user,
+      sessionId,
+    },
   };
 }

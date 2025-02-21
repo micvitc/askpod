@@ -1,3 +1,5 @@
+import nookies from "nookies";
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
@@ -9,6 +11,7 @@ export default async function handler(req, res) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${nookies.get({ req }).token}`,
       },
       // You may need to forward cookies manually if required.
     });
