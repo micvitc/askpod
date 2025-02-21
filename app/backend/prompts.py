@@ -3,6 +3,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from backend.schemas import PodcastTranscript
 from langchain import hub
 
+
 podcast_parser = JsonOutputParser(pydantic_object=PodcastTranscript)
 
 podcast_prompt = PromptTemplate(

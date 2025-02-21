@@ -71,6 +71,7 @@ export default function Register() {
               />
             </div>
             <Button type="submit">Register</Button>
+            <Button type="button" onClick={() => router.push("/login")}>Login</Button>
           </form>
         </CardContent>
       </Card>

@@ -10,10 +10,10 @@ pipeline = KPipeline(lang_code="a")
 def generate_audio(text, output_filename="combined_audio.wav"):
     audio_segments = []
     for i, (gs, ps, audio) in enumerate(
-        pipeline(text, voice="bm_george", speed=1, split_pattern=r"\n+")
+        pipeline(text, voice="af_heart", speed=1, split_pattern=r"\n+")
     ):
         audio_segments.append(audio)
 
     combined_audio = np.concatenate(audio_segments)
-    output_filename = os.path.join("audio", output_filename)
+    output_filename = os.path.join(output_filename)
     sf.write(output_filename, combined_audio, 24000)

@@ -42,8 +42,11 @@ from backend.tts.generate import generate_audio
 from datetime import datetime
 import os
 from backend.auth import router as auth_router
+from backend.auth import get_current_user
+from backend.models import PodcastSession
+from backend.database import Base, engine, SessionLocal
 
-
+Base.metadata.create_all(bind=engine)
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 FRONTEND_ORIGINS = os.environ.get("FRONTEND_ORIGINS", "").split(",")
 
@@ -122,37 +125,155 @@ async def upload_pdf(file: UploadFile = File(...)):
 
 
 @app.post("/create_transcript")
-async def create_transcript_endpoint(file: UploadFile = File(...)):
+async def create_transcript_endpoint(
+    file: UploadFile = File(...), user: dict = Depends(get_current_user)
+):
     try:
         content = await file.read()
-        os.makedirs("uploads", exist_ok=True)
-        with open(f"uploads/{file.filename}", "wb") as f:
+        # Use the username rather than an id
+        user_upload_dir = f"uploads/{user.username}"
+        os.makedirs(user_upload_dir, exist_ok=True)
+        file_path = f"{user_upload_dir}/{file.filename}"
+        with open(file_path, "wb") as f:
             f.write(content)
-        podcast = create_transcript(f"uploads/{file.filename}")
+        podcast = create_transcript(file_path)
         return podcast
     except Exception as e:
         raise TranscriptLoadError(detail=str(e))
 
 
-@app.post("/generate_podcast")
-async def generate_podcast_endpoint(request: Request, file: UploadFile = File(...)):
+# LANGUAGE: python
+from backend.models import PodcastSession
+from sqlalchemy.orm import Session
+from backend.database import get_db  # Assume a dependency providing a database session
+
+
+from fastapi import Body, HTTPException
+
+
+from fastapi import Query
+
+
+@app.post("/create_session")
+async def create_session(
+    user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     try:
+        # Create a session record with empty pdf_path and audio_path.
+        session_record = PodcastSession(
+            user_id=user.username,
+            pdf_path="",
+            audio_path="",
+        )
+        db.add(session_record)
+        db.commit()
+        db.refresh(session_record)
+
+        # Create the session folder under uploads/<username>/<session_id>
+        session_folder = f"uploads/{user.username}/{session_record.id}"
+        os.makedirs(session_folder, exist_ok=True)
+        return session_record
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/upload_pdf_to_session")
+async def upload_pdf_to_session(
+    session_id: int = Query(...),
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        # Retrieve the session record and ensure it belongs to the current user.
+        session_record = (
+            db.query(PodcastSession)
+            .filter(
+                PodcastSession.id == session_id, PodcastSession.user_id == user.username
+            )
+            .first()
+        )
+        if not session_record:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # Use the existing session folder.
+        session_folder = f"uploads/{user.username}/{session_record.id}"
+        os.makedirs(session_folder, exist_ok=True)
+        pdf_path = f"{session_folder}/{file.filename}"
         content = await file.read()
-        file_id = f"{uuid.uuid4()}--{file.filename}"
-        async with aiofiles.open(f"uploads/{file_id}", "wb") as f:
+        async with aiofiles.open(pdf_path, "wb") as f:
             await f.write(content)
-        transcript = create_transcript(f"uploads/{file_id}")
-        generate_audio(transcript["transcript"], output_filename=f"{file_id}.wav")
-        full_url = request.url_for("audio", path=f"{file_id}.wav")
-        return {"podcast_path": full_url._url}
+
+        # Update the session record with the correct pdf_path.
+        session_record.pdf_path = pdf_path
+        db.commit()
+        return session_record
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/generate_podcast")
+async def generate_podcast_endpoint(
+    request: Request,
+    session_id: int = Body(...),
+    user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        # Retrieve the session record and ensure it belongs to the current user.
+        session_record = (
+            db.query(PodcastSession)
+            .filter(
+                PodcastSession.id == session_id, PodcastSession.user_id == user.username
+            )
+            .first()
+        )
+        if not session_record:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # Generate transcript using the stored PDF file.
+        transcript = create_transcript(session_record.pdf_path)
+
+        # Create audio in a folder under audio/<username>/<session_id>
+        audio_folder = f"audio/{user.username}/{session_record.id}"
+        os.makedirs(audio_folder, exist_ok=True)
+        # Use the original PDF basename with a .wav extension.
+        base = os.path.splitext(os.path.basename(session_record.pdf_path))[0]
+        audio_path = f"{audio_folder}/{base}.wav"
+        generate_audio(transcript["transcript"], output_filename=audio_path)
+
+        # Update the session record with the audio path.
+        session_record.audio_path = audio_path
+        db.commit()
+
+        # Create a full URL to the generated audio.
+        full_url = request.url_for(
+            "audio",
+            path=f"{user.username}/{session_record.id}/{os.path.basename(audio_path)}",
+        )
+        return {"podcast_path": full_url._url, "session_id": session_record.id}
     except Exception as e:
         return JSONResponse(status_code=500, content={"detail": str(e)})
-    finally:
-        try:
-            if os.path.exists(f"uploads/{file_id}"):
-                os.remove(f"uploads/{file_id}")
-        except Exception as e:
-            print(f"Error deleting file: {str(e)}")
+
+
+@app.get("/sessions")
+async def list_sessions(
+    user: dict = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    sessions = (
+        db.query(PodcastSession).filter(PodcastSession.user_id == user.username).all()
+    )
+    # Return a simple list of sessions
+    return [
+        {
+            "id": s.id,
+            "pdf_path": s.pdf_path,
+            "audio_path": s.audio_path,
+            "created_at": s.created_at.isoformat(),
+        }
+        for s in sessions
+    ]
 
 
 app.include_router(auth_router)

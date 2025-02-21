@@ -67,6 +67,7 @@ export default function Login() {
               />
             </div>
             <Button type="submit">Login</Button>
+            <Button type="button" onClick={() => router.push("/register")}>Register</Button>
           </form>
         </CardContent>
       </Card>

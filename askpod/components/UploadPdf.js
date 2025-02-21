@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
+import nookies from "nookies";
 
 const UploadPdf = () => {
   const [file, setFile] = useState(null);
@@ -27,8 +28,12 @@ const UploadPdf = () => {
     formData.append("file", file);
 
     try {
+      const token = nookies.get(null).token;
       const response = await fetch("/api/generatePodcast", {
         method: "POST",
+        headers: {
+          Authorization: token ? `Bearer ${token}` : "",
+        },
         body: formData,
       });
       if (!response.ok) {
