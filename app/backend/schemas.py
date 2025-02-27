@@ -1,10 +1,18 @@
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Tuple
+
+
+class MaleHost(BaseModel):
+    male_section: str = Field(description="Male host section.")
+
+
+class FemaleHost(BaseModel):
+    female_section: str = Field(description="Female host section.")
 
 
 class PodcastTranscript(BaseModel):
-    transcript: str = Field(
-        description="Create a new podcast transcript based on the given material."
+    transcript: List[Tuple[MaleHost, FemaleHost]] = Field(
+        description="Create a new podcast transcript based on the given material consisting of Two Hosts. One Male and one Female."
     )
 
 

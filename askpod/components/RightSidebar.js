@@ -16,7 +16,7 @@ export default function RightSidebar({ currentSessionId }) {
   const fetchSessions = async () => {
     const token = nookies.get(null).token;
     try {
-      const res = await fetch("http://localhost:8000/sessions", {
+      const res = await fetch("/api/sessions", {
         credentials: "include",
         headers: {
           "Content-Type": "application/json",

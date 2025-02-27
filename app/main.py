@@ -1,4 +1,6 @@
 from dotenv import load_dotenv
+
+load_dotenv()
 import jwt
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from passlib.context import CryptContext
@@ -62,6 +64,7 @@ from backend.database import Base, engine, SessionLocal
 
 from minio import Minio
 from minio.error import S3Error
+
 
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 FRONTEND_ORIGINS = os.environ.get("FRONTEND_ORIGINS", "").split(",")
@@ -238,7 +241,6 @@ async def upload_pdf_to_session(
 
         # Get the MinIO URL
         minio_url = minio_client.presigned_get_object(minio_bucket, minio_object_name)
-
         # Update the session record with the MinIO URL
         session_record.pdf_path = minio_url
         session_record.pdf_name = file.filename

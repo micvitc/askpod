@@ -5,17 +5,15 @@ export default async function handler(req, res) {
   const token = cookies.token;
 
   try {
-    const response = await fetch("http://localhost:8000/create_session", {
-      method: "POST",
+    const response = await fetch("http://localhost:8000/sessions", {
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
         ...(token && { Authorization: `Bearer ${token}` }),
       },
-      body: JSON.stringify(req.body),
     });
     if (!response.ok) {
-      throw new Error("Failed to create session");
+      throw new Error("Failed to fetch sessions");
     }
     const data = await response.json();
     res.status(200).json(data);

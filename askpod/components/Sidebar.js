@@ -14,7 +14,7 @@ export default function Sidebar() {
   const fetchSessions = async () => {
     const token = nookies.get(null).token;
     try {
-      const res = await fetch("http://localhost:8000/sessions", {
+      const res = await fetch("/api/sessions", {
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
@@ -32,7 +32,7 @@ export default function Sidebar() {
   const createSession = async () => {
     const token = nookies.get(null).token;
     try {
-      const res = await fetch("http://localhost:8000/create_session", {
+      const res = await fetch("/api/create-session", {
         method: "POST",
         credentials: "include",
         headers: {
