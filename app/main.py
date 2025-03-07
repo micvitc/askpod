@@ -89,20 +89,20 @@ app.add_middleware(
 )
 
 
-# @app.post("/load")
-# async def load_data(request: LoadDataRequest):
-#     try:
-#         return load_transcript(request.video_id)
-#     except Exception as e:
-#         raise TranscriptLoadError(detail=str(e))
+@app.post("/load")
+async def load_data(request: LoadDataRequest):
+    try:
+        return load_transcript(request.video_id)
+    except Exception as e:
+        raise TranscriptLoadError(detail=str(e))
 
 
-# @app.post("/query", response_model=QueryResponse)
-# async def query(request: QueryRequest):
-#     try:
-#         return query_transcripts(request.query, [])
-#     except Exception as e:
-#         raise QueryError(detail=str(e))
+@app.post("/query", response_model=QueryResponse)
+async def query(request: QueryRequest):
+    try:
+        return query_transcripts(request.query, [])
+    except Exception as e:
+        raise QueryError(detail=str(e))
 
 os.makedirs("uploads", exist_ok=True)
 os.makedirs("audio", exist_ok=True)
